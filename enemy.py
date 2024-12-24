@@ -3,7 +3,7 @@ import math
 import random
 from settings import *
 
-class Enemy(pygame.sprite.Sprite):
+class BaseEnemy(pygame.sprite.Sprite):
     def __init__(self, x, y, game):
         super().__init__()
         self.game = game
@@ -37,7 +37,19 @@ class Enemy(pygame.sprite.Sprite):
         
         # Создаем копию изображения для анимации урона
         self.original_image = self.image.copy()
-
+        
+        self.states = {
+            'idle': self.idle_state,
+            'patrol': self.patrol_state,
+            'chase': self.chase_state,
+            'attack': self.attack_state,
+            'flee': self.flee_state,
+            'stunned': self.stunned_state
+        }
+        self.stun_duration = 0
+        self.patrol_points = []
+        self.current_patrol_index = 0
+        
     def init_sprite(self):
         """Инициализация спрайта"""
         self.radius = ENEMY_SIZE // 2
@@ -84,7 +96,7 @@ class Enemy(pygame.sprite.Sprite):
         # Проверяем здоровье для отступления
         if self.current_hp / self.max_hp <= ENEMY_FLEE_HP_THRESHOLD:
             self.state = 'flee'
-        # Проверяем расстояние для атаки
+        # Проверяем расстояние ��ля атаки
         elif distance_to_player <= ENEMY_ATTACK_RANGE:
             self.state = 'attack'
         # Проверяем расстояние для преследования
@@ -259,7 +271,7 @@ class Enemy(pygame.sprite.Sprite):
         return directions
 
     def _apply_group_behavior(self):
-        """Применяет групповое поведение"""
+        """Применяет улучшенное групповое поведение"""
         if self.velocity.length() == 0:
             return
             
@@ -267,39 +279,77 @@ class Enemy(pygame.sprite.Sprite):
         alignment = pygame.math.Vector2(0, 0)
         cohesion = pygame.math.Vector2(0, 0)
         
+        # Добавляем лидерство
+        leader = None
+        leader_score = 0
+        
         nearby_enemies = []
         check_distance = MIN_ENEMY_DISTANCE * 3
         
-        # Оптимизированная проверка ближайших врагов
         for other in self.game.enemies:
             if other != self and other.alive:
                 dx = self.rect.centerx - other.rect.centerx
                 dy = self.rect.centery - other.rect.centery
-                # Быстрая проверка расстояния без sqrt
-                approx_dist = dx * dx + dy * dy
-                if approx_dist < check_distance * check_distance:
-                    nearby_enemies.append((other, math.sqrt(approx_dist)))
+                dist_sq = dx * dx + dy * dy
+                
+                if dist_sq < check_distance * check_distance:
+                    distance = math.sqrt(dist_sq)
+                    nearby_enemies.append((other, distance))
+                    
+                    # Определяем лиде��а группы
+                    other_score = other.current_hp / other.max_hp + (1 if other.state == 'chase' else 0)
+                    if other_score > leader_score:
+                        leader_score = other_score
+                        leader = other
         
         if nearby_enemies:
             for other, distance in nearby_enemies:
+                # Разделение
                 if distance < MIN_ENEMY_DISTANCE:
-                    separation += self.get_direction_from_enemy(other) / distance
+                    separation += self.get_direction_from_enemy(other) / (distance + 0.1)
+                
+                # Выравнивание
                 if other.velocity.length() > 0:
-                    alignment += other.velocity.normalize()
+                    weight = 1.0
+                    if other == leader:
+                        weight = 2.0  # Усиливаем влияние лидера
+                    alignment += other.velocity.normalize() * weight
+                
+                # Сплочённость
                 cohesion += (other.position - self.position)
+                
+                # Тактическое позиционирование
+                if self.state == 'attack' and other.state == 'attack':
+                    # Пытаемся окружить цель
+                    angle = random.uniform(0, 2 * math.pi)
+                    tactical_pos = pygame.math.Vector2(
+                        math.cos(angle) * ENEMY_ATTACK_RANGE,
+                        math.sin(angle) * ENEMY_ATTACK_RANGE
+                    )
+                    cohesion += tactical_pos * 0.5
             
             count = len(nearby_enemies)
+            
+            # Нормализация и применение весов
             if separation.length() > 0:
-                separation = separation.normalize() * 1.5
+                separation = separation.normalize() * 1.8  # Увеличиваем вес разделения
             if alignment.length() > 0:
                 alignment = (alignment / count).normalize() * 0.8
             if cohesion.length() > 0:
-                cohesion = (cohesion / count).normalize() * 0.3
+                cohesion = (cohesion / count).normalize() * 0.4
+            
+            # Добавляем случайное отклонение для более естественного движения
+            random_deviation = pygame.math.Vector2(
+                random.uniform(-0.2, 0.2),
+                random.uniform(-0.2, 0.2)
+            )
             
             # Комбинируем все силы
-            self.velocity += (separation + alignment + cohesion) * 0.1
+            self.velocity += (separation + alignment + cohesion + random_deviation) * 0.15
+            
+            # Ограничиваем скорость
             if self.velocity.length() > 0:
-                self.velocity = self.velocity.normalize() * ENEMY_SPEED
+                self.velocity = self.velocity.normalize() * self.speed
 
     def get_distance_to_enemy(self, other):
         """Вычисляет расстояние до другого врага"""
@@ -385,10 +435,15 @@ class Enemy(pygame.sprite.Sprite):
             # Получаем игрока из game
             player = self.game.player
             
-            # Обновляем состояние и движение
+            # Обновляем состояние
             self.update_state(player)
+            
+            # Вызываем соответствующий метод состояния
+            if self.state in self.states:
+                self.states[self.state](player)
+            
+            # Обновляем движение и анимации
             self.update_movement(player)
-            self.try_attack(player)
             self.update_damage_animation()
 
     def draw_health_bar(self, screen):
@@ -432,3 +487,125 @@ class Enemy(pygame.sprite.Sprite):
                 if distance < (self.radius + other.radius):
                     return True
         return False 
+
+    def idle_state(self, player):
+        """Состояние ожидания"""
+        if self.get_distance_to_player(player) <= ENEMY_AGGRO_RANGE:
+            self.state = 'chase'
+            
+    def patrol_state(self, player):
+        """Патрулирование между точками"""
+        if not self.patrol_points:
+            self.generate_patrol_points()
+            
+        target = self.patrol_points[self.current_patrol_index]
+        direction = (pygame.math.Vector2(target) - self.position).normalize()
+        self.velocity = direction * (self.speed * 0.7)
+        
+        if self.position.distance_to(target) < TILESIZE:
+            self.current_patrol_index = (self.current_patrol_index + 1) % len(self.patrol_points)
+            
+        if self.get_distance_to_player(player) <= ENEMY_AGGRO_RANGE:
+            self.state = 'chase'
+            
+    def stunned_state(self, player):
+        """Состояние оглушения"""
+        current_time = pygame.time.get_ticks()
+        if current_time >= self.stun_duration:
+            self.state = 'chase'
+        self.velocity = pygame.math.Vector2(0, 0)
+        
+    def generate_patrol_points(self):
+        """Генерация точек патрулирования"""
+        self.patrol_points = []
+        center = pygame.math.Vector2(self.spawn_position)
+        for i in range(4):
+            angle = i * (2 * math.pi / 4)
+            distance = random.uniform(TILESIZE * 3, TILESIZE * 6)
+            point = center + pygame.math.Vector2(math.cos(angle), math.sin(angle)) * distance
+            if not self.game.level.is_wall_at(point.x, point.y):
+                self.patrol_points.append(point)
+                
+    def apply_stun(self, duration):
+        """Применение оглушения"""
+        self.state = 'stunned'
+        self.stun_duration = pygame.time.get_ticks() + duration
+
+    def chase_state(self, player):
+        """Состояние преследования игрока"""
+        direction = self._get_path_direction(player)
+        distance = self.get_distance_to_player(player)
+        
+        if distance > self.attack_range:
+            self.velocity = direction * self.speed
+        elif distance < self.attack_range * 0.8:
+            self.velocity = -direction * self.speed
+        else:
+            self.state = 'attack'
+            
+    def attack_state(self, player):
+        """Состояние атаки"""
+        distance = self.get_distance_to_player(player)
+        if distance > self.attack_range * 1.2:
+            self.state = 'chase'
+        else:
+            self.try_attack(player)
+            # Небольшое перемещение во время атаки для динамичности
+            direction = self._get_path_direction(player)
+            self.velocity = direction * (self.speed * 0.3)
+            
+    def flee_state(self, player):
+        """Состояние отступления"""
+        flee_direction = -self.get_direction_to_player(player)
+        
+        # Добавляем отталкивание от других врагов
+        for other in self.game.enemies:
+            if other != self and other.alive:
+                dx = self.rect.centerx - other.rect.centerx
+                dy = self.rect.centery - other.rect.centery
+                dist_sq = dx * dx + dy * dy
+                if dist_sq < ENEMY_ATTACK_RANGE * ENEMY_ATTACK_RANGE * 4:
+                    dist = math.sqrt(dist_sq)
+                    flee_direction += pygame.math.Vector2(dx/dist, dy/dist) * 0.5
+        
+        if flee_direction.length() > 0:
+            self.velocity = flee_direction.normalize() * self.speed
+            
+        # Проверяем восстановление здоровья
+        if self.current_hp / self.max_hp > ENEMY_FLEE_HP_THRESHOLD * 1.5:
+            self.state = 'chase'
+
+class MeleeEnemy(BaseEnemy):
+    def __init__(self, x, y, game):
+        super().__init__(x, y, game)
+        self.max_hp = ENEMY_HP
+        self.speed = ENEMY_SPEED
+        self.attack_range = ENEMY_ATTACK_RANGE
+        self.attack_damage = ENEMY_ATTACK_DAMAGE
+
+class RangedEnemy(BaseEnemy):
+    def __init__(self, x, y, game):
+        super().__init__(x, y, game)
+        self.max_hp = ENEMY_HP * 0.8
+        self.speed = ENEMY_SPEED * 0.8
+        self.attack_range = ENEMY_ATTACK_RANGE * 2
+        self.attack_damage = ENEMY_ATTACK_DAMAGE * 0.7
+        
+    def try_attack(self, player):
+        current_time = pygame.time.get_ticks()
+        if self.state == 'attack' and current_time - self.last_attack_time >= ENEMY_ATTACK_COOLDOWN:
+            self.last_attack_time = current_time
+            # Создаем снаряд
+            direction = self.get_direction_to_player(player)
+            self.game.projectiles.add(Projectile(self.rect.center, direction, self.attack_damage))
+
+class TankEnemy(BaseEnemy):
+    def __init__(self, x, y, game):
+        super().__init__(x, y, game)
+        self.max_hp = ENEMY_HP * 2
+        self.speed = ENEMY_SPEED * 0.6
+        self.attack_range = ENEMY_ATTACK_RANGE * 0.8
+        self.attack_damage = ENEMY_ATTACK_DAMAGE * 1.5 
+
+# Для обратной совместимости
+Enemy = MeleeEnemy  # Используем MeleeEnemy как стандартный тип врага 

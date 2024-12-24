@@ -69,7 +69,7 @@ class LightningBolt(MagicWeapon):
     def __init__(self, game):
         super().__init__(game, 'lightning_bolt')
         self.chain_count = 3  # Количество прыжков молнии
-        self.chain_range = 200  # Максимальное расстояние между целями для прыжка
+        self.chain_range = 200  # Максимальное расстояние между целя��и для прыжка
     
     def find_next_target(self, current_pos, hit_enemies):
         closest_enemy = None
@@ -88,11 +88,11 @@ class LightningBolt(MagicWeapon):
         if super().cast(player, target_pos):
             # Находим первую цель
             first_target = None
-            min_distance = float('inf')
+            min_distance = self.settings['range']  # Используем range вместо float('inf')
             
             for enemy in self.game.enemies:
                 distance = pygame.math.Vector2(enemy.rect.center).distance_to(player.rect.center)
-                if distance < min_distance:
+                if distance < min_distance:  # Проверяем, что враг в пределах досягаемости
                     min_distance = distance
                     first_target = enemy
             
@@ -146,7 +146,7 @@ class MagicProjectile(pygame.sprite.Sprite):
         self.rect.center = self.position
         self.distance_traveled += movement.length()
         
-        # Уничтожаем снаряд, если он пролетел максимальную дистанцию
+        # Уничтожаем снаряд, ��сли он пролетел максимальную дистанцию
         if self.distance_traveled >= self.max_range:
             self.kill()
 

@@ -50,7 +50,7 @@ MAGIC_WEAPONS = {
         'mana_cost': 50,
         'cooldown': 1200,
         'color': (255, 255, 0),  # Желтый
-        'range': 200,
+        'range': 350,
         'width': 3
     },
     'heal': {

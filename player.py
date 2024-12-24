@@ -1,6 +1,7 @@
 import pygame
 import math
 from settings import *
+from weapons import Fireball, IceLance, LightningBolt, Heal
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, game):
@@ -21,6 +22,7 @@ class Player(pygame.sprite.Sprite):
         self.velocity_x = 0
         self.velocity_y = 0
         self.position = pygame.math.Vector2(self.rect.center)
+        self.knockback = pygame.math.Vector2(0, 0)
         
         # Атрибуты игрока
         self.hp = PLAYER_START_HP
@@ -28,15 +30,28 @@ class Player(pygame.sprite.Sprite):
         self.level = PLAYER_START_LEVEL
         self.xp = 0
         self.xp_to_next_level = XP_TO_LEVEL
-        self.is_invulnerable = False
-        self.invulnerable_time = 0
-        self.invulnerable_duration = 500
-        self.knockback = pygame.math.Vector2(0, 0)
+        
+        # Атрибуты маны
+        self.current_mana = PLAYER_START_MANA
+        self.max_mana = PLAYER_MAX_MANA
+        self.last_mana_regen = pygame.time.get_ticks()
+        
+        # М��гическое оружие
+        self.weapons = {
+            'fireball': Fireball(game),
+            'ice_lance': IceLance(game),
+            'lightning_bolt': LightningBolt(game),
+            'heal': Heal(game)
+        }
+        self.current_weapon = 'fireball'
         
         # Атрибуты состояния
         self.alive = True
         self.death_time = 0
         self.respawn_delay = 3000  # 3 секунды до возрождения
+        self.is_invulnerable = False
+        self.invulnerable_time = 0
+        self.invulnerable_duration = 500
         
         # Атрибуты атаки
         self.last_attack_time = 0
@@ -65,7 +80,7 @@ class Player(pygame.sprite.Sprite):
         self.velocity_x = 0
         self.velocity_y = 0
         
-        if not self.is_dashing:  # Движение только если не в уклонении
+        if not self.is_dashing:
             if keys[pygame.K_LEFT] or keys[pygame.K_a]:
                 self.velocity_x = -PLAYER_SPEED
             if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
@@ -74,17 +89,34 @@ class Player(pygame.sprite.Sprite):
                 self.velocity_y = -PLAYER_SPEED
             if keys[pygame.K_DOWN] or keys[pygame.K_s]:
                 self.velocity_y = PLAYER_SPEED
-                
-            # Уклонение на SHIFT
-            if keys[pygame.K_LSHIFT] and not self.is_dashing:
-                self.try_dash()
             
-        # Обновление направления атаки на основе позиции мыши
-        self.update_attack_direction(mouse_pos)
+            # Уклонение на SHIFT
+            if keys[pygame.K_LSHIFT]:
+                self.try_dash()
         
-        # Атака левой кнопкой мыши
-        if mouse[0]:  # ЛКМ
+        # Смена оружия
+        if keys[pygame.K_1]:
+            self.current_weapon = 'fireball'
+        elif keys[pygame.K_2]:
+            self.current_weapon = 'ice_lance'
+        elif keys[pygame.K_3]:
+            self.current_weapon = 'lightning_bolt'
+        elif keys[pygame.K_4]:
+            self.current_weapon = 'heal'
+        
+        # Обычная атака на F
+        if keys[pygame.K_f]:
+            self.update_attack_direction(mouse_pos)
             self.attack()
+        
+        # Магическая атака на ЛКМ
+        if mouse[0]:  # ЛКМ
+            # Получаем позицию мыши в мировых координатах
+            world_mouse_pos = (
+                mouse_pos[0] + self.game.camera.offset.x,
+                mouse_pos[1] + self.game.camera.offset.y
+            )
+            self.weapons[self.current_weapon].cast(self, world_mouse_pos)
 
     def try_dash(self):
         """Попытка выполнить уклонение"""
@@ -130,7 +162,7 @@ class Player(pygame.sprite.Sprite):
         return False
 
     def collide_with_walls(self, dx=0, dy=0):
-        """Проверка коллизий со стенами"""
+        """Прверка коллизий со стенами"""
         # Проверяем четыре угла и центры сторон персонажа
         test_points = [
             (self.rect.centerx + dx, self.rect.centery + dy),  # Центр
@@ -200,7 +232,7 @@ class Player(pygame.sprite.Sprite):
             self.rect.centerx - self.game.camera.offset.x,
             self.rect.centery - self.game.camera.offset.y
         )
-        # Вычисляем вектор от позиции игрока на экране к курсору
+        # Вычисляем вектор от позиции игрока на экране к курсуру
         mouse_vec = pygame.math.Vector2(mouse_pos)
         self.attack_direction = (mouse_vec - screen_pos).normalize()
 
@@ -225,7 +257,7 @@ class Player(pygame.sprite.Sprite):
                 self.attack_progress = time_since_attack / ATTACK_ANIMATION_DURATION
                 
                 # Вычисляем текущий угол взмаха
-                swing_progress = math.sin(self.attack_progress * math.pi)  # Плавное движение
+                swing_progress = math.sin(self.attack_progress * math.pi)  # Плавное движ��ние
                 current_angle = self.attack_start_angle - (ATTACK_SWING_ANGLE / 2) + (ATTACK_SWING_ANGLE * swing_progress)
                 
                 # Создаем точку для следа
@@ -235,7 +267,7 @@ class Player(pygame.sprite.Sprite):
                     self.rect.centery + math.sin(angle_rad) * PLAYER_ATTACK_RANGE
                 )
                 
-                # Добавляем точку в с��ед
+                # Добавляем точку в след
                 self.attack_trail.append(trail_point)
                 if len(self.attack_trail) > ATTACK_TRAIL_LENGTH:
                     self.attack_trail.pop(0)
@@ -295,14 +327,8 @@ class Player(pygame.sprite.Sprite):
         self.xp -= self.xp_to_next_level
         # Увеличиваем требования к следующему уровню на 50%
         self.xp_to_next_level = int(self.xp_to_next_level * 1.5)
-
-    def draw_attack_indicator(self, screen):
-        """Отрисовка индикатора направления атаки"""
-        if self.is_attacking:
-            end_pos = (self.rect.centerx + self.attack_direction.x * PLAYER_ATTACK_RANGE,
-                      self.rect.centery + self.attack_direction.y * PLAYER_ATTACK_RANGE)
-            pygame.draw.line(screen, RED, self.rect.center, end_pos, 2)
-            self.is_attacking = False
+        # Восстанавливаем ману при повышении уровня
+        self.current_mana = self.max_mana
 
     def draw_xp_bar(self, screen):
         """Отрисовка полоски опыта"""
@@ -420,6 +446,41 @@ class Player(pygame.sprite.Sprite):
         health_text = font.render(f"HP: {self.hp}/{self.max_hp}", True, WHITE)
         screen.blit(health_text, (220, 10))
 
+    def update_mana(self):
+        """Обновление маны"""
+        current_time = pygame.time.get_ticks()
+        time_passed = (current_time - self.last_mana_regen) / 1000.0  # в секундах
+        
+        if time_passed > 0:
+            # Рассчитываем восстановление маны с учетом уровня
+            mana_regen = (MANA_REGEN_BASE + (self.level - 1) * MANA_REGEN_PER_LEVEL) * time_passed
+            self.current_mana = min(self.max_mana, self.current_mana + mana_regen)
+            self.last_mana_regen = current_time
+
+    def draw_mana_bar(self, screen):
+        """Отрисовка полоски маны"""
+        mana_bar_bg = pygame.Rect(
+            10,
+            40,  # Располагаем под полоской здоровья
+            200,
+            20
+        )
+        pygame.draw.rect(screen, HEALTH_BAR_BG, mana_bar_bg)
+        
+        mana_width = int(200 * (self.current_mana / self.max_mana))
+        mana_bar = pygame.Rect(
+            10,
+            40,
+            mana_width,
+            20
+        )
+        pygame.draw.rect(screen, (0, 0, 255), mana_bar)  # Синий цвет для маны
+        
+        # Отображение значения маны
+        font = pygame.font.Font(None, 24)
+        mana_text = font.render(f"MP: {int(self.current_mana)}/{self.max_mana}", True, WHITE)
+        screen.blit(mana_text, (220, 40))
+
     def update(self):
         """Обновление состояния игрока"""
         if self.alive:
@@ -427,14 +488,99 @@ class Player(pygame.sprite.Sprite):
             self.move()
             self.update_attack_animation()
             self.update_invulnerability()
+            self.update_mana()
+            
+            # Обновляем снаряды
+            for weapon in self.weapons.values():
+                weapon.projectiles.update()
         else:
             self.check_respawn()
+
+    def draw_weapon_interface(self, screen):
+        """Отрисовка интерфейса оружия"""
+        for i, (weapon_name, weapon) in enumerate(self.weapons.items()):
+            # Позиция иконки
+            x = WEAPON_ICON_START_X + (WEAPON_ICON_SIZE + WEAPON_ICON_SPACING) * i
+            y = WEAPON_ICON_Y
+            
+            # Рисуем фон иконки
+            icon_rect = pygame.Rect(x, y, WEAPON_ICON_SIZE, WEAPON_ICON_SIZE)
+            
+            # Е��ли это выбранное оружие, рисуем подсветку
+            if weapon_name == self.current_weapon:
+                pygame.draw.rect(screen, WEAPON_ICON_SELECTED_COLOR, icon_rect)
+            else:
+                pygame.draw.rect(screen, WEAPON_ICON_BG_COLOR, icon_rect)
+            
+            # Рисуем рамку
+            pygame.draw.rect(screen, WHITE, icon_rect, 2)
+            
+            # Рисуем символ оружия
+            weapon_surface = pygame.Surface((WEAPON_ICON_SIZE - 8, WEAPON_ICON_SIZE - 8), pygame.SRCALPHA)
+            if weapon_name == 'fireball':
+                # Рисуем огненный шар
+                pygame.draw.circle(weapon_surface, MAGIC_WEAPONS[weapon_name]['color'],
+                                 (WEAPON_ICON_SIZE // 2 - 4, WEAPON_ICON_SIZE // 2 - 4),
+                                 WEAPON_ICON_SIZE // 3)
+            elif weapon_name == 'ice_lance':
+                # Рисуем ледяное копье
+                start_pos = (4, WEAPON_ICON_SIZE // 2 - 4)
+                end_pos = (WEAPON_ICON_SIZE - 12, WEAPON_ICON_SIZE // 2 - 4)
+                pygame.draw.line(weapon_surface, MAGIC_WEAPONS[weapon_name]['color'],
+                               start_pos, end_pos, 6)
+                # Рисуем наконечник
+                pygame.draw.polygon(weapon_surface, MAGIC_WEAPONS[weapon_name]['color'],
+                                 [(end_pos[0], end_pos[1] - 8),
+                                  (end_pos[0] + 8, end_pos[1]),
+                                  (end_pos[0], end_pos[1] + 8)])
+            else:  # lightning_bolt
+                # Рисуем молнию
+                points = [(4, 4), (WEAPON_ICON_SIZE//2 - 4, WEAPON_ICON_SIZE//2 - 4),
+                         (WEAPON_ICON_SIZE//2 - 12, WEAPON_ICON_SIZE//2 - 4),
+                         (WEAPON_ICON_SIZE - 12, WEAPON_ICON_SIZE - 12)]
+                pygame.draw.lines(weapon_surface, MAGIC_WEAPONS[weapon_name]['color'],
+                                False, points, 3)
+            
+            screen.blit(weapon_surface, (x + 4, y + 4))
+            
+            # Проверяем кулдаун
+            current_time = pygame.time.get_ticks()
+            if current_time - weapon.last_cast_time < weapon.settings['cooldown']:
+                # Рисуем затемнение
+                cooldown_surface = pygame.Surface((WEAPON_ICON_SIZE, WEAPON_ICON_SIZE), pygame.SRCALPHA)
+                cooldown_surface.fill(WEAPON_ICON_COOLDOWN_COLOR)
+                screen.blit(cooldown_surface, (x, y))
+                
+                # Показываем оставшееся время кулдауна
+                remaining = (weapon.settings['cooldown'] - (current_time - weapon.last_cast_time)) / 1000
+                if remaining > 0:
+                    font = pygame.font.Font(None, 20)
+                    text = font.render(f"{remaining:.1f}", True, WHITE)
+                    text_rect = text.get_rect(center=(x + WEAPON_ICON_SIZE//2, y + WEAPON_ICON_SIZE//2))
+                    screen.blit(text, text_rect)
+            
+            # Проверяем достаточно ли маны
+            if self.current_mana < weapon.settings['mana_cost']:
+                # Рисуем индикатор нехватки маны
+                mana_surface = pygame.Surface((WEAPON_ICON_SIZE, WEAPON_ICON_SIZE), pygame.SRCALPHA)
+                mana_surface.fill(WEAPON_ICON_MANA_COLOR)
+                screen.blit(mana_surface, (x, y))
+            
+            # Рисуем стоимость маны
+            font = pygame.font.Font(None, 20)
+            mana_text = font.render(f"{weapon.settings['mana_cost']}", True, WHITE)
+            screen.blit(mana_text, (x + 2, y + WEAPON_ICON_SIZE - 20))
+            
+            # Рисуем название оружия под иконкой
+            name_font = pygame.font.Font(None, 20)
+            name_text = name_font.render(WEAPON_DESCRIPTIONS[weapon_name], True, WHITE)
+            name_rect = name_text.get_rect(midtop=(x + WEAPON_ICON_SIZE//2, y + WEAPON_ICON_SIZE + 5))
+            screen.blit(name_text, name_rect)
 
     def draw(self, screen, camera):
         """Отрисовка игрока и его состояния"""
         # Отрисовка спрайта
         if self.alive:
-            # Мигание при неуязвимости
             if self.is_invulnerable and (pygame.time.get_ticks() // 100) % 2:
                 temp_image = self.image.copy()
                 temp_image.fill((255, 255, 255, 128), special_flags=pygame.BLEND_RGBA_MULT)
@@ -442,14 +588,25 @@ class Player(pygame.sprite.Sprite):
             else:
                 screen.blit(self.image, camera.apply(self))
         else:
-            # Отрисовка "мертвого" состояния
             temp_image = self.image.copy()
             temp_image.fill((100, 100, 100, 128), special_flags=pygame.BLEND_RGBA_MULT)
             screen.blit(temp_image, camera.apply(self))
-            
-            # Отображение времени до возрождения
-            if not self.alive:
-                font = pygame.font.Font(None, 36)
-                time_left = max(0, (self.respawn_delay - (pygame.time.get_ticks() - self.death_time)) // 1000)
-                text = font.render(f"Возрождение через: {time_left}", True, WHITE)
-                text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)) 
+        
+        # Отрисовка эффекта атаки мечом
+        self.draw_attack_animation(screen, camera)
+        
+        # Отрисовка снарядов
+        for weapon in self.weapons.values():
+            for projectile in weapon.projectiles:
+                screen.blit(projectile.image, camera.apply(projectile))
+        
+        # Отрисовка интерфейса
+        self.draw_health_bar(screen)
+        self.draw_mana_bar(screen)
+        self.draw_xp_bar(screen)
+        self.draw_weapon_interface(screen)
+        
+        # Отображение текущего оружия
+        font = pygame.font.Font(None, 24)
+        weapon_text = font.render(f"Оружие: {self.current_weapon}", True, WHITE)
+        screen.blit(weapon_text, (10, 70)) 

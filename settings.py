@@ -13,9 +13,55 @@ PLAYER_SPEED = 5
 PLAYER_START_HP = 100
 PLAYER_ATTACK_RANGE = 80
 PLAYER_ATTACK_COOLDOWN = 500  # миллисекунды
-PLAYER_ATTACK_DAMAGE = 25
+PLAYER_ATTACK_DAMAGE = 8  # Уменьшено с 25 до 8
 PLAYER_START_LEVEL = 1
 XP_TO_LEVEL = 100  # Базовый опыт для следующего уровня
+
+# Настройки маны
+PLAYER_START_MANA = 100
+PLAYER_MAX_MANA = 100
+MANA_REGEN_BASE = 15  # Базовое восстановление маны в секунду
+MANA_REGEN_PER_LEVEL = 1.5  # Дополнительное восстановление маны за уровень
+
+# Настройки магического оружия
+MAGIC_WEAPONS = {
+    'fireball': {
+        'damage': 40,
+        'mana_cost': 30,
+        'cooldown': 800,
+        'projectile_speed': 8,
+        'color': (255, 100, 0),  # Оранжевый
+        'size': 16,
+        'range': 400,
+        'width': 3
+    },
+    'ice_lance': {
+        'damage': 25,
+        'mana_cost': 20,
+        'cooldown': 400,
+        'projectile_speed': 12,
+        'color': (0, 255, 255),  # Голубой
+        'size': 12,
+        'range': 300,
+        'width': 2
+    },
+    'lightning_bolt': {
+        'damage': 60,
+        'mana_cost': 50,
+        'cooldown': 1200,
+        'color': (255, 255, 0),  # Желтый
+        'range': 200,
+        'width': 3
+    },
+    'heal': {
+        'heal_amount': 60,
+        'mana_cost': 40,
+        'cooldown': 20000,  # 20 секунд
+        'color': (0, 255, 0),  # Зеленый
+        'size': 32,
+        'width': 2
+    }
+}
 
 # Настройки атаки
 ATTACK_ANIMATION_DURATION = 200  # Длительность анимации в миллисекундах
@@ -136,3 +182,21 @@ MIN_ENEMY_DISTANCE_FROM_PLAYER = 10  # Минимальное начальное
 
 # Настройки сложности
 DIFFICULTY_SCALING = 1.5  # Множитель сложности для каждого следующего уровня 
+
+# Настройки интерфейса оружия
+WEAPON_ICON_SIZE = 48
+WEAPON_ICON_SPACING = 10
+WEAPON_ICON_Y = 100
+WEAPON_ICON_START_X = 10
+WEAPON_ICON_BG_COLOR = (40, 40, 40)  # Темно-серый фон
+WEAPON_ICON_SELECTED_COLOR = (60, 60, 180)  # Синий цвет выделения
+WEAPON_ICON_COOLDOWN_COLOR = (100, 100, 100, 128)  # Полупрозрачный серый
+WEAPON_ICON_MANA_COLOR = (0, 0, 255, 180)  # Полупрозрачный синий
+
+# Настройки описаний оружия
+WEAPON_DESCRIPTIONS = {
+    'fireball': 'Огненный шар',
+    'ice_lance': 'Ледяное копье',
+    'lightning_bolt': 'Молния',
+    'heal': 'Исцеление'
+} 

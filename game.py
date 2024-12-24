@@ -12,6 +12,7 @@ class Game:
         self.all_sprites = pygame.sprite.Group()
         self.obstacles = pygame.sprite.Group()
         self.enemies = pygame.sprite.Group()
+        self.effects = pygame.sprite.Group()  # Группа для визуальных эффектов
         
         # Игровые параметры
         self.current_level = 1
@@ -76,6 +77,26 @@ class Game:
         # Проверяем портал
         if self.level.check_portal_collision(self.player.position):
             self.next_level()
+        
+        # Проверяем попадания снарядов по врагам
+        self.check_projectile_hits()
+
+    def check_projectile_hits(self):
+        """Проверка попаданий снарядов по врагам"""
+        for weapon in self.player.weapons.values():
+            for projectile in weapon.projectiles:
+                hits = pygame.sprite.spritecollide(
+                    projectile,
+                    self.enemies,
+                    False,
+                    pygame.sprite.collide_circle
+                )
+                for enemy in hits:
+                    if enemy.alive:
+                        if enemy.take_damage(weapon.settings['damage']):
+                            self.player.gain_xp(ENEMY_XP_REWARD)  # Начисляем опыт за убийство
+                        projectile.kill()
+                        break
 
     def draw(self, screen):
         """Отрисовка всех игровых объектов"""
@@ -94,9 +115,12 @@ class Game:
             else:
                 screen.blit(sprite.image, sprite.rect)
         
-        # Отрисовка анимации атаки
-        if self.player.alive:
-            self.player.draw_attack_animation(screen, self.camera)
+        # Отрисовка эффектов
+        for effect in list(self.effects):
+            if hasattr(effect, 'draw'):
+                effect.draw(screen, self.camera)
+            if hasattr(effect, 'is_alive') and not effect.is_alive():
+                self.effects.remove(effect)
         
         # Отрисовка полосок здоровья врагов с учетом камеры
         for enemy in self.enemies:
@@ -119,10 +143,6 @@ class Game:
                         HEALTH_BAR_HEIGHT
                     )
                     pygame.draw.rect(screen, HEALTH_BAR_HP, health_bar)
-            
-        # Отрисовка интерфейса (не зависит от камеры)
-        self.player.draw_health_bar(screen)
-        self.player.draw_xp_bar(screen)
         
         # Отображение текущего уровня
         font = pygame.font.Font(None, 36)

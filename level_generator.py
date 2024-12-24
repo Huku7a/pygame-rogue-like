@@ -188,12 +188,10 @@ class LevelGenerator:
         
         # Проверка, что позиция находится в пределах уровня
         if not (0 <= x < self.width and 0 <= y < self.height):
-            print(f"Позиция {pos} вне границ уровня")
             return False
             
         # Проверка, что позиция не в стене
         if self.tiles[x][y] != TILE_FLOOR:
-            print(f"Позиция {pos} �� стене")
             return False
         
         # Проверка расстояния от других врагов
@@ -202,7 +200,6 @@ class LevelGenerator:
             dy = y - enemy_pos[1]
             distance = (dx * dx + dy * dy) ** 0.5
             if distance < MIN_ENEMY_DISTANCE:
-                print(f"Позиция {pos} слишком близко к другому врагу (расстояние: {distance})")
                 return False
         
         # Проверка расстояния от точки спавна только для первых двух комнат
@@ -211,12 +208,10 @@ class LevelGenerator:
             dy = y - self.spawn_position[1]
             distance = (dx * dx + dy * dy) ** 0.5
             if distance < MIN_ENEMY_DISTANCE_FROM_PLAYER:
-                print(f"Позиция {pos} слишком близко к точке спавна (расстояние: {distance})")
                 return False
         
         # Проверка, что позиция внутри текущей комнаты
         if not (room.x < x < room.x + room.width and room.y < y < room.y + room.height):
-            print(f"Позиция {pos} вне комнаты {(room.x, room.y, room.width, room.height)}")
             return False
             
         return True
@@ -250,9 +245,6 @@ class LevelGenerator:
                 if self._is_valid_enemy_position(pos, room, i):
                     self.enemy_positions.append(pos)
                     placed_in_room += 1
-                    print(f"Успешно размещен враг в позиции: {pos}")
-                else:
-                    print("Позиция не подходит")
                     
                 attempts += 1
             
